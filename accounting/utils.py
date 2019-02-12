@@ -12,6 +12,7 @@ This is the base code for the engineer project.
 #######################################################
 """
 
+
 class PolicyAccounting(object):
     """
      Each policy has its own instance of accounting.
@@ -27,7 +28,7 @@ class PolicyAccounting(object):
             date_cursor = datetime.now().date()
 
         invoices = Invoice.query.filter_by(policy_id=self.policy.id)\
-                                .filter(Invoice.bill_date < date_cursor)\
+                                .filter(Invoice.bill_date <= date_cursor)\
                                 .order_by(Invoice.bill_date)\
                                 .all()
         due_now = 0
@@ -35,7 +36,7 @@ class PolicyAccounting(object):
             due_now += invoice.amount_due
 
         payments = Payment.query.filter_by(policy_id=self.policy.id)\
-                                .filter(Payment.transaction_date < date_cursor)\
+                                .filter(Payment.transaction_date <= date_cursor)\
                                 .all()
         for payment in payments:
             due_now -= payment.amount_paid
@@ -88,18 +89,18 @@ class PolicyAccounting(object):
         else:
             print "THIS POLICY SHOULD NOT CANCEL"
 
-
     def make_invoices(self):
         for invoice in self.policy.invoices:
-            invoice.delete()
+            db.session.delete(invoice)
+        db.session.commit()
 
         billing_schedules = {'Annual': None, 'Semi-Annual': 3, 'Quarterly': 4, 'Monthly': 12}
 
         invoices = []
         first_invoice = Invoice(self.policy.id,
-                                self.policy.effective_date, #bill_date
-                                self.policy.effective_date + relativedelta(months=1), #due
-                                self.policy.effective_date + relativedelta(months=1, days=14), #cancel
+                                self.policy.effective_date,  # bill_date
+                                self.policy.effective_date + relativedelta(months=1),  # due
+                                self.policy.effective_date + relativedelta(months=1, days=14),  # cancel
                                 self.policy.annual_premium)
         invoices.append(first_invoice)
 
@@ -149,14 +150,17 @@ class PolicyAccounting(object):
 # The functions below are for the db and 
 # shouldn't need to be edited.
 ################################
+
+
 def build_or_refresh_db():
     db.drop_all()
     db.create_all()
     insert_data()
     print "DB Ready!"
 
+
 def insert_data():
-    #Contacts
+    # Contacts
     contacts = []
     john_doe_agent = Contact('John Doe', 'Agent')
     contacts.append(john_doe_agent)
