@@ -113,3 +113,56 @@ class TestReturnAccountBalance(unittest.TestCase):
         self.payments.append(pa.make_payment(contact_id=self.policy.named_insured,
                                              date_cursor=invoices[1].bill_date, amount=600))
         self.assertEquals(pa.return_account_balance(date_cursor=invoices[1].bill_date), 0)
+
+
+class TestInvoices(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.test_agent = Contact('Test Agent', 'Agent')
+        cls.test_insured = Contact('Test Insured', 'Named Insured')
+        db.session.add(cls.test_agent)
+        db.session.add(cls.test_insured)
+        db.session.commit()
+
+        cls.policy = Policy('Test Policy', date(2015, 1, 1), 1200)
+        db.session.add(cls.policy)
+        cls.policy.named_insured = cls.test_insured.id
+        cls.policy.agent = cls.test_agent.id
+        db.session.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        db.session.delete(cls.test_insured)
+        db.session.delete(cls.test_agent)
+        db.session.delete(cls.policy)
+        db.session.commit()
+
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        for invoice in self.policy.invoices:
+            db.session.delete(invoice)
+        db.session.commit()
+
+    def test_monthly_invoices(self):
+        self.policy.billing_schedule = "Monthly"
+        pa = PolicyAccounting(self.policy.id)
+        pa.make_invoices()
+
+        # Tests if the number if invoices is 12.
+        self.assertEquals(len(self.policy.invoices), 12)
+        for invoice in self.policy.invoices:
+            # Tests due dates
+            self.assertEquals(invoice.due_date, date(2015, 1, 1) +
+                              relativedelta(months=self.policy.invoices.index(invoice) + 1))
+            # Tests if monthly invoices is 100
+            self.assertEquals(invoice.amount_due, 100)
+            # Tests cancel dates
+            self.assertEquals(invoice.cancel_date, date(2015, 1, 1) +
+                              relativedelta(months=self.policy.invoices.index(invoice) + 1, days=14))
+
+
+
+
