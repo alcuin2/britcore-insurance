@@ -1,10 +1,21 @@
 #!/user/bin/env python2.7
 
+import logging
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from accounting import db
 from models import Contact, Invoice, Payment, Policy
+
+# Configure logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+file_handler = logging.FileHandler("policy_accounting.log") # log file
+formatter = logging.Formatter("	%(asctime)s:%(levelname)s:%(name)s:%(message)s")
+file_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
 
 """
 #######################################################
@@ -18,12 +29,25 @@ class PolicyAccounting(object):
      Each policy has its own instance of accounting.
     """
     def __init__(self, policy_id):
+        """
+        Constructor
+        :param policy_id: Policy Id
+        """
+
         self.policy = Policy.query.filter_by(id=policy_id).one()
 
         if not self.policy.invoices:
             self.make_invoices()
 
     def return_account_balance(self, date_cursor=None):
+        """
+        This method returns account balance for the policy
+        :param date_cursor: date object filter
+        :return: due_now: Amount due
+        """
+
+        logger.info("Running return_account_balance for policy %s" % self.policy.id)
+
         if not date_cursor:
             date_cursor = datetime.now().date()
 
@@ -31,6 +55,8 @@ class PolicyAccounting(object):
                                 .filter(Invoice.bill_date <= date_cursor)\
                                 .order_by(Invoice.bill_date)\
                                 .all()
+        logger.info(str(len(invoices)) + " invoices queried from database for policy %s" % self.policy.id)
+
         due_now = 0
         for invoice in invoices:
             due_now += invoice.amount_due
@@ -38,12 +64,24 @@ class PolicyAccounting(object):
         payments = Payment.query.filter_by(policy_id=self.policy.id)\
                                 .filter(Payment.transaction_date <= date_cursor)\
                                 .all()
+        logger.info(str(len(payments)) + " payments queried from database for policy %s" % self.policy.id)
+
         for payment in payments:
             due_now -= payment.amount_paid
 
         return due_now
 
     def make_payment(self, contact_id=None, date_cursor=None, amount=0):
+
+        """
+        This method is for making payment on a policy
+        :param contact_id: Id of the name insured
+        :param date_cursor: date object filter
+        :param amount: to be paid
+        :return: payment object
+        """
+
+        logger.info("Running make_payment for policy %s" % self.policy.id)
         if not date_cursor:
             date_cursor = datetime.now().date()
 
@@ -51,7 +89,7 @@ class PolicyAccounting(object):
             try:
                 contact_id = self.policy.named_insured
             except:
-                pass
+                logger.exception("Contact Id is not found for policy %s" % self.policy.id)
 
         payment = Payment(self.policy.id,
                           contact_id,
@@ -60,9 +98,12 @@ class PolicyAccounting(object):
         db.session.add(payment)
         db.session.commit()
 
+        logger.info("Payment successful for policy %s" % self.policy.id)
+
         return payment
 
     def evaluate_cancellation_pending_due_to_non_pay(self, date_cursor=None):
+
         """
          If this function returns true, an invoice
          on a policy has passed the due date without
@@ -72,6 +113,12 @@ class PolicyAccounting(object):
         pass
 
     def evaluate_cancel(self, date_cursor=None):
+
+        """
+         This method checks if should cancel
+         :param date_cursor: date object filter
+         :return:
+         """
         if not date_cursor:
             date_cursor = datetime.now().date()
 
@@ -90,6 +137,11 @@ class PolicyAccounting(object):
             print "THIS POLICY SHOULD NOT CANCEL"
 
     def make_invoices(self):
+
+        """
+        This method is for generating invoices
+        :return:
+        """
         for invoice in self.policy.invoices:
             db.session.delete(invoice)
         db.session.commit()
@@ -141,6 +193,8 @@ class PolicyAccounting(object):
                 invoices.append(invoice)
         else:
             print "You have chosen a bad billing schedule."
+
+        logger.info(str(len(invoices)) + " invoices generated for policy %s" % self.policy.id)
 
         for invoice in invoices:
             db.session.add(invoice)
